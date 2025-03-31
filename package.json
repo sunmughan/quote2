@@ -17,9 +17,9 @@
     "@mui/icons-material": "^5.14.10",
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
-    "jspdf": "^2.5.1",
-    "jspdf-autotable": "^3.6.0",
-    "react-to-pdf": "^1.0.1",
+    "jspdf": "^3.0.1",
+    "jspdf-autotable": "^5.0.2",
+    "react-to-pdf": "^2.0.0",
     "uuid": "^9.0.1"
   },
   "devDependencies": {
