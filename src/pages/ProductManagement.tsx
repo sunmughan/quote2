@@ -58,6 +58,8 @@ interface TilesProduct {
   areaRequired: number;
   noOfBoxes: number;
   totalAmount: number;
+  pricePerSqFt: number;
+  packagingInfo: number;
 }
 
 interface AdhesiveProduct {
@@ -132,7 +134,9 @@ const ProductManagement: React.FC = () => {
     discountedPrice: 0,
     areaRequired: 0,
     noOfBoxes: 0,
-    totalAmount: 0
+    totalAmount: 0,
+    pricePerSqFt: 0,
+    packagingInfo: 0
   });
   
   // Form state for adhesive
@@ -236,7 +240,9 @@ const ProductManagement: React.FC = () => {
         discountedPrice: 0,
         areaRequired: 0,
         noOfBoxes: 0,
-        totalAmount: 0
+        totalAmount: 0,
+        pricePerSqFt: 0,
+        packagingInfo: 0
       });
     } else if (activeTab === 'adhesive') {
       setAdhesiveForm({
@@ -273,15 +279,15 @@ const ProductManagement: React.FC = () => {
     // Set form based on active tab
     if (activeTab === 'tiles') {
       setTilesForm({
-        ...product
+        ...product as TilesProduct
       });
     } else if (activeTab === 'adhesive') {
       setAdhesiveForm({
-        ...product
+        ...(product as AdhesiveProduct)
       });
     } else { // cp-sw
       setCpswForm({
-        ...product
+        ...(product as CPSWProduct)
       });
     }
     
@@ -302,7 +308,8 @@ const ProductManagement: React.FC = () => {
       const mrp = name === 'mrp' ? parseFloat(String(value)) || 0 : tilesForm.mrp;
       const discount = name === 'discount' ? parseFloat(String(value)) || 0 : tilesForm.discount;
       const discountedPrice = mrp - (mrp * discount / 100);
-      updatedForm = { ...updatedForm, discountedPrice, mrp, discount };
+      const pricePerSqFt = discountedPrice;
+      updatedForm = { ...updatedForm, discountedPrice, mrp, discount, pricePerSqFt };
     }
     
     if (name === 'discountedPrice' || name === 'areaRequired' || name === 'noOfBoxes') {
@@ -310,7 +317,16 @@ const ProductManagement: React.FC = () => {
       const areaRequired = name === 'areaRequired' ? parseFloat(String(value)) || 0 : tilesForm.areaRequired;
       const noOfBoxes = name === 'noOfBoxes' ? parseInt(String(value)) || 0 : tilesForm.noOfBoxes;
       const totalAmount = discountedPrice * areaRequired * noOfBoxes;
-      updatedForm = { ...updatedForm, discountedPrice, areaRequired, noOfBoxes, totalAmount };
+      const pricePerSqFt = discountedPrice;
+      updatedForm = { ...updatedForm, discountedPrice, areaRequired, noOfBoxes, totalAmount, pricePerSqFt };
+    }
+    
+    if (name === 'pricePerSqFt') {
+      const pricePerSqFt = parseFloat(String(value)) || 0;
+      const areaRequired = tilesForm.areaRequired;
+      const noOfBoxes = tilesForm.noOfBoxes;
+      const totalAmount = pricePerSqFt * areaRequired * noOfBoxes;
+      updatedForm = { ...updatedForm, pricePerSqFt, totalAmount };
     }
     
     setTilesForm(updatedForm as TilesProduct);
@@ -546,6 +562,8 @@ const ProductManagement: React.FC = () => {
                         <TableCell align="right">MRP (₹)</TableCell>
                         <TableCell align="right">Discount (%)</TableCell>
                         <TableCell align="right">Discounted Price (₹)</TableCell>
+                        <TableCell align="right">Price/Sq.Ft (₹)</TableCell>
+                        <TableCell align="right">Packaging</TableCell>
                       </>
                     )}
                     
@@ -577,30 +595,32 @@ const ProductManagement: React.FC = () => {
                       
                       {activeTab === 'tiles' && (
                         <>
-                          <TableCell>{product.areaOfApplication}</TableCell>
-                          <TableCell>{product.shadeName}</TableCell>
-                          <TableCell>{product.dimensions}</TableCell>
-                          <TableCell>{product.surface}</TableCell>
+                          <TableCell>{(product as TilesProduct).areaOfApplication}</TableCell>
+                          <TableCell>{(product as TilesProduct).shadeName}</TableCell>
+                          <TableCell>{(product as TilesProduct).dimensions}</TableCell>
+                          <TableCell>{(product as TilesProduct).surface}</TableCell>
                           <TableCell align="right">{product.mrp}</TableCell>
-                          <TableCell align="right">{product.discount}%</TableCell>
-                          <TableCell align="right">{product.discountedPrice}</TableCell>
+                          <TableCell align="right">{(product as TilesProduct).discount}%</TableCell>
+                          <TableCell align="right">{(product as TilesProduct).discountedPrice}</TableCell>
+                          <TableCell align="right">{(product as TilesProduct).pricePerSqFt}</TableCell>
+                          <TableCell align="right">{(product as TilesProduct).packagingInfo}</TableCell>
                         </>
                       )}
                       
                       {activeTab === 'adhesive' && (
                         <>
-                          <TableCell>{product.category}</TableCell>
+                          <TableCell>{(product as AdhesiveProduct).category}</TableCell>
                           <TableCell align="right">{product.mrp}</TableCell>
-                          <TableCell align="right">{product.dPrice}</TableCell>
+                          <TableCell align="right">{(product as AdhesiveProduct).dPrice}</TableCell>
                         </>
                       )}
                       
                       {activeTab === 'cp-sw' && (
                         <>
-                          <TableCell>{product.productCode}</TableCell>
-                          <TableCell>{product.description}</TableCell>
+                          <TableCell>{(product as CPSWProduct).productCode}</TableCell>
+                          <TableCell>{(product as CPSWProduct).description}</TableCell>
                           <TableCell align="right">{product.mrp}</TableCell>
-                          <TableCell align="right">{product.dPrice}</TableCell>
+                          <TableCell align="right">{(product as CPSWProduct).dPrice}</TableCell>
                         </>
                       )}
                       
@@ -764,6 +784,30 @@ const ProductManagement: React.FC = () => {
                 margin="normal"
                 InputProps={{ inputProps: { min: 0 } }}
                 disabled
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Price Per Sq Ft (₹)"
+                name="pricePerSqFt"
+                type="number"
+                value={tilesForm.pricePerSqFt}
+                onChange={handleTilesFormChange}
+                margin="normal"
+                InputProps={{ inputProps: { min: 0 } }}
+              />
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <TextField
+                fullWidth
+                label="Packaging Info (Boxes)"
+                name="packagingInfo"
+                type="number"
+                value={tilesForm.packagingInfo}
+                onChange={handleTilesFormChange}
+                margin="normal"
+                InputProps={{ inputProps: { min: 0 } }}
               />
             </Grid>
             <Grid item xs={12}>
