@@ -92,6 +92,32 @@ const QuotationGeneration = () => {
     const savedStaff = JSON.parse(localStorage.getItem('staff') || '[]');
     setStaffList(savedStaff);
     
+    // Load business settings from localStorage
+    const savedSettings = JSON.parse(localStorage.getItem('businessSettings') || '{}');
+    if (Object.keys(savedSettings).length > 0) {
+      setCompanyName(savedSettings.businessName || 'Prateek Tiles and Marble');
+      setCompanyAddress(savedSettings.businessAddress || '123 Main Street');
+      setCompanyCity(savedSettings.businessCity || 'Mumbai');
+      setCompanyState(savedSettings.businessState || 'Maharashtra');
+      setCompanyZipCode(savedSettings.businessZipCode || '400001');
+      setCompanyPhone(savedSettings.businessPhone || '+91 9876543210');
+      setCompanyEmail(savedSettings.businessEmail || 'info@prateektiles.com');
+      
+      // Set logo from business settings
+      if (savedSettings.logo) {
+        setCompanyLogo(savedSettings.logo);
+        setLogoPreview(savedSettings.logo);
+      }
+    } else {
+      // Set default company information if no settings found
+      setCompanyAddress('123 Main Street');
+      setCompanyCity('Mumbai');
+      setCompanyState('Maharashtra');
+      setCompanyZipCode('400001');
+      setCompanyPhone('+91 9876543210');
+      setCompanyEmail('info@prateektiles.com');
+    }
+    
     // Generate a unique quotation number
     const generateQuotationNumber = () => {
       const date = new Date();
@@ -103,14 +129,6 @@ const QuotationGeneration = () => {
     };
     
     setQuotationNumber(generateQuotationNumber());
-    
-    // Set default company information
-    setCompanyAddress('123 Main Street');
-    setCompanyCity('Mumbai');
-    setCompanyState('Maharashtra');
-    setCompanyZipCode('400001');
-    setCompanyPhone('+91 9876543210');
-    setCompanyEmail('info@prateektiles.com');
   }, []);
   
   // Calculate subtotal
@@ -252,6 +270,10 @@ const QuotationGeneration = () => {
     const pageHeight = doc.internal.pageSize.height;
     const margin = 15;
     
+    // Set consistent fonts throughout the document
+    // Use helvetica for all text (default in jsPDF)
+    doc.setFont('helvetica');
+    
     // Draw border around the page
     doc.setDrawColor(0, 166, 126); // Green border color
     doc.setLineWidth(0.5);
@@ -279,7 +301,8 @@ const QuotationGeneration = () => {
     // Add logo if available
     if (companyLogo) {
       try {
-        doc.addImage(companyLogo, 'JPEG', margin + 5, margin + 5, 30, 15);
+        // Position the logo at the top of the document
+        doc.addImage(companyLogo, 'JPEG', margin + 5, margin + 5, 40, 20);
       } catch (error) {
         console.error('Error adding logo to PDF:', error);
       }
@@ -343,23 +366,51 @@ const QuotationGeneration = () => {
     doc.setTextColor(0, 0, 0); // Black text
     let currentY = productTableY + 10;
     
+    // Set consistent font for all content
+    doc.setFont('helvetica');
+    
     quotationProducts.forEach((product, index) => {
       const productTotal = product.price * product.quantity;
       const discountAmount = (productTotal * product.discount) / 100;
       const finalTotal = productTotal - discountAmount;
-      const rowHeight = 15;
+      const rowHeight = 20; // Increased row height to prevent overflow
       
+      // Draw row rectangles
       doc.rect(margin + 5, currentY, (pageWidth - 2 * margin - 10) / 5, rowHeight);
       doc.rect(margin + 5 + (pageWidth - 2 * margin - 10) / 5, currentY, 3 * (pageWidth - 2 * margin - 10) / 5, rowHeight);
       doc.rect(margin + 5 + 3 * (pageWidth - 2 * margin - 10) / 5, currentY, (pageWidth - 2 * margin - 10) / 5, rowHeight);
       doc.rect(margin + 5 + 4 * (pageWidth - 2 * margin - 10) / 5, currentY, (pageWidth - 2 * margin - 10) / 5, rowHeight);
       
-      doc.text(product.quantity.toString(), margin + 10, currentY + 10);
-      doc.text(`${product.brand} - ${product.productCode}\n${product.description}`, margin + 10 + (pageWidth - 2 * margin - 10) / 5, currentY + 6);
-      // Set font for numeric values to match due date font
+      // Quantity column
       doc.setFontSize(10);
-      doc.text(`₹ ${product.price.toFixed(2)}`, margin + 10 + 3 * (pageWidth - 2 * margin - 10) / 5, currentY + 10);
-      doc.text(`₹ ${finalTotal.toFixed(2)}`, margin + 10 + 4 * (pageWidth - 2 * margin - 10) / 5, currentY + 10);
+      doc.text(product.quantity.toString(), margin + 10, currentY + 10);
+      
+      // Description column - handle long text with proper wrapping
+      const descriptionX = margin + 10 + (pageWidth - 2 * margin - 10) / 5;
+      const descriptionWidth = 3 * (pageWidth - 2 * margin - 10) / 5 - 10;
+      
+      // Create product description with proper formatting
+      let productDesc = product.brand || '';
+      if (product.productCode) {
+        productDesc += productDesc ? ` - ${product.productCode}` : product.productCode;
+      }
+      
+      doc.text(productDesc, descriptionX, currentY + 7);
+      
+      // Add description on next line if it exists
+      if (product.description) {
+        doc.setFontSize(9); // Smaller font for description
+        doc.text(product.description, descriptionX, currentY + 14, {
+          maxWidth: descriptionWidth
+        });
+      }
+      
+      // Price columns - only show discounted price
+      doc.setFontSize(10);
+      // Show final price (already discounted) instead of original price
+      const discountedUnitPrice = product.price - (product.price * product.discount / 100);
+      doc.text(`₹${discountedUnitPrice.toFixed(2)}`, margin + 10 + 3 * (pageWidth - 2 * margin - 10) / 5, currentY + 10);
+      doc.text(`₹${finalTotal.toFixed(2)}`, margin + 10 + 4 * (pageWidth - 2 * margin - 10) / 5, currentY + 10);
       
       currentY += rowHeight;
     });
@@ -367,20 +418,23 @@ const QuotationGeneration = () => {
     // Add totals
     const totalsY = currentY + 10;
     
+    // Set consistent font for totals section
+    doc.setFont('helvetica');
+    doc.setFontSize(10);
+    
     // Subtotal
     doc.text('Subtotal', pageWidth - margin - 60, totalsY);
-    doc.setFontSize(10); // Set consistent font size for numeric values
-    doc.text(`₹ ${calculateSubtotal().toFixed(2)}`, pageWidth - margin - 10, totalsY, { align: 'right' });
+    doc.text(`₹${calculateSubtotal().toFixed(2)}`, pageWidth - margin - 10, totalsY, { align: 'right' });
     
     // Tax
-    doc.setFontSize(10); // Reset font size for label
-    doc.text(`Sales Tax (${taxRate}%)`, pageWidth - margin - 60, totalsY + 10);
-    doc.text(`₹ ${calculateTaxAmount().toFixed(2)}`, pageWidth - margin - 10, totalsY + 10, { align: 'right' });
+    doc.text(`GST (${taxRate}%)`, pageWidth - margin - 60, totalsY + 10);
+    doc.text(`₹${calculateTaxAmount().toFixed(2)}`, pageWidth - margin - 10, totalsY + 10, { align: 'right' });
     
     // Total
+    doc.setFont('helvetica', 'bold');
     doc.text('Total', pageWidth - margin - 60, totalsY + 20);
-    doc.setFontSize(10); // Consistent font size
-    doc.text(`₹ ${calculateGrandTotal().toFixed(2)}`, pageWidth - margin - 10, totalsY + 20, { align: 'right' });
+    doc.text(`₹${calculateGrandTotal().toFixed(2)}`, pageWidth - margin - 10, totalsY + 20, { align: 'right' });
+    doc.setFont('helvetica', 'normal'); // Reset font weight
     
     // Add quotation prepared by
     doc.text(`Quotation prepared by: ${selectedStaff.name}`, margin + 5, totalsY + 40);
@@ -400,20 +454,18 @@ const QuotationGeneration = () => {
     doc.text('To accept this quotation, sign here and return:', margin + 5, termsY + 10);
     doc.line(margin + 5, termsY + 20, pageWidth - margin - 5, termsY + 20);
     
-    // Add logo if available, otherwise show placeholder
+    // Add logo at the bottom if available, otherwise show placeholder
     if (companyLogo) {
       try {
         doc.addImage(companyLogo, 'JPEG', margin + 5, termsY + 30, 40, 20);
       } catch (error) {
         // If error adding image, show placeholder
         doc.rect(margin + 5, termsY + 30, 40, 20);
-        doc.text('YOUR LOGO', margin + 25, termsY + 40, { align: 'center' });
-        doc.text('HERE', margin + 25, termsY + 45, { align: 'center' });
+        doc.text(companyName, margin + 25, termsY + 40, { align: 'center' });
       }
     } else {
       doc.rect(margin + 5, termsY + 30, 40, 20);
-      doc.text('YOUR LOGO', margin + 25, termsY + 40, { align: 'center' });
-      doc.text('HERE', margin + 25, termsY + 45, { align: 'center' });
+      doc.text(companyName, margin + 25, termsY + 40, { align: 'center' });
     }
     
     // Add thank you message
@@ -587,17 +639,16 @@ const QuotationGeneration = () => {
                   <TableHead>
                     <TableRow>
                       <TableCell>Product</TableCell>
-                      <TableCell align="right">Price (₹)</TableCell>
+                      <TableCell align="right">Unit Price (₹)</TableCell>
                       <TableCell align="right">Qty</TableCell>
-                      <TableCell align="right">Discount (%)</TableCell>
                       <TableCell align="right">Total (₹)</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {quotationProducts.map((product) => {
-                      const productTotal = product.price * product.quantity;
-                      const discountAmount = (productTotal * product.discount) / 100;
-                      const finalTotal = productTotal - discountAmount;
+                      // Calculate discounted unit price
+                      const discountedUnitPrice = product.price - (product.price * product.discount / 100);
+                      const finalTotal = discountedUnitPrice * product.quantity;
                       
                       return (
                         <TableRow key={product.id}>
@@ -613,10 +664,9 @@ const QuotationGeneration = () => {
                               )}
                             </Box>
                           </TableCell>
-                          <TableCell align="right">{product.price.toFixed(2)}</TableCell>
+                          <TableCell align="right">₹{discountedUnitPrice.toFixed(2)}</TableCell>
                           <TableCell align="right">{product.quantity}</TableCell>
-                          <TableCell align="right">{product.discount}%</TableCell>
-                          <TableCell align="right">{finalTotal.toFixed(2)}</TableCell>
+                          <TableCell align="right">₹{finalTotal.toFixed(2)}</TableCell>
                         </TableRow>
                       );
                     })}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, ChangeEvent, SyntheticEvent } from 'react';
+import React, { useState, useEffect, ChangeEvent, SyntheticEvent, useRef } from 'react';
 
 import {
   Typography,
@@ -28,16 +28,23 @@ import {
   Snackbar,
   Alert,
   InputAdornment,
-  Tooltip
+  Tooltip,
+  Divider,
+  CircularProgress
 } from '@mui/material';
 import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Search as SearchIcon,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Upload as UploadIcon,
+  Download as DownloadIcon,
+  FileUpload as FileUploadIcon
 } from '@mui/icons-material';
 import { v4 as uuidv4 } from 'uuid';
+import * as XLSX from 'xlsx';
+import { saveAs } from 'file-saver';
 
 
 // Add FormChangeEvent type definition
@@ -119,6 +126,12 @@ const ProductManagement: React.FC = () => {
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error'>('success');
+  
+  // State for bulk import
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importResults, setImportResults] = useState<{success: number, failed: number, errors: string[]}>({success: 0, failed: 0, errors: []});
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // Form state for tiles
   const [tilesForm, setTilesForm] = useState<TilesProduct>({
@@ -486,6 +499,263 @@ const ProductManagement: React.FC = () => {
     }
   };
   
+  // Handle bulk import dialog open
+  const handleOpenImportDialog = (): void => {
+    setImportDialogOpen(true);
+  };
+  
+  // Handle bulk import dialog close
+  const handleCloseImportDialog = (): void => {
+    setImportDialogOpen(false);
+    setImportResults({success: 0, failed: 0, errors: []});
+  };
+  
+  // Handle file selection for import
+  const handleFileSelect = (): void => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
+    }
+  };
+  
+  // Process the imported file
+  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    setIsImporting(true);
+    const reader = new FileReader();
+    
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(worksheet);
+        
+        processImportedData(jsonData);
+      } catch (error) {
+        setImportResults({
+          success: 0,
+          failed: 0,
+          errors: ['Failed to parse Excel file. Please check the file format.']
+        });
+        setIsImporting(false);
+      }
+    };
+    
+    reader.onerror = () => {
+      setImportResults({
+        success: 0,
+        failed: 0,
+        errors: ['Error reading file. Please try again.']
+      });
+      setIsImporting(false);
+    };
+    
+    reader.readAsBinaryString(file);
+    
+    // Reset the file input
+    if (event.target) {
+      event.target.value = '';
+    }
+  };
+  
+  // Process the imported data based on active tab
+  const processImportedData = (jsonData: any[]): void => {
+    if (!jsonData.length) {
+      setImportResults({
+        success: 0,
+        failed: 0,
+        errors: ['No data found in the file.']
+      });
+      setIsImporting(false);
+      return;
+    }
+    
+    let newProducts = { ...products };
+    let successCount = 0;
+    let failedCount = 0;
+    let errors: string[] = [];
+    
+    if (activeTab === 'tiles') {
+      jsonData.forEach((row, index) => {
+        try {
+          // Validate required fields
+          if (!row.brand || !row.areaOfApplication || !row.shadeName || !row.dimensions || !row.surface) {
+            failedCount++;
+            errors.push(`Row ${index + 1}: Missing required fields`);
+            return;
+          }
+          
+          // Parse numeric values
+          const mrp = parseFloat(row.mrp) || 0;
+          const discount = parseFloat(row.discount) || 0;
+          const discountedPrice = mrp - (mrp * discount / 100);
+          const packagingInfo = parseFloat(row.packagingInfo) || 0;
+          
+          const newProduct: TilesProduct = {
+            id: uuidv4(),
+            sno: (newProducts.tiles.length + successCount + 1).toString(),
+            brand: row.brand,
+            areaOfApplication: row.areaOfApplication,
+            shadeName: row.shadeName,
+            image: '',
+            dimensions: row.dimensions,
+            surface: row.surface,
+            mrp,
+            discount,
+            discountedPrice,
+            areaRequired: 0,
+            noOfBoxes: 0,
+            totalAmount: 0,
+            pricePerSqFt: discountedPrice,
+            packagingInfo
+          };
+          
+          newProducts.tiles.push(newProduct);
+          successCount++;
+        } catch (error) {
+          failedCount++;
+          errors.push(`Row ${index + 1}: Invalid data format`);
+        }
+      });
+    } else if (activeTab === 'adhesive') {
+      jsonData.forEach((row, index) => {
+        try {
+          // Validate required fields
+          if (!row.brand || !row.category) {
+            failedCount++;
+            errors.push(`Row ${index + 1}: Missing required fields`);
+            return;
+          }
+          
+          // Parse numeric values
+          const mrp = parseFloat(row.mrp) || 0;
+          const dPrice = parseFloat(row.dPrice) || 0;
+          
+          const newProduct: AdhesiveProduct = {
+            id: uuidv4(),
+            sno: (newProducts.adhesive.length + successCount + 1).toString(),
+            brand: row.brand,
+            category: row.category,
+            mrp,
+            dPrice,
+            noOfBags: 0,
+            totalAmount: 0
+          };
+          
+          newProducts.adhesive.push(newProduct);
+          successCount++;
+        } catch (error) {
+          failedCount++;
+          errors.push(`Row ${index + 1}: Invalid data format`);
+        }
+      });
+    } else { // cp-sw
+      jsonData.forEach((row, index) => {
+        try {
+          // Validate required fields
+          if (!row.brand || !row.productCode || !row.description) {
+            failedCount++;
+            errors.push(`Row ${index + 1}: Missing required fields`);
+            return;
+          }
+          
+          // Parse numeric values
+          const mrp = parseFloat(row.mrp) || 0;
+          const dPrice = parseFloat(row.dPrice) || 0;
+          
+          const newProduct: CPSWProduct = {
+            id: uuidv4(),
+            sno: (newProducts['cp-sw'].length + successCount + 1).toString(),
+            brand: row.brand,
+            productCode: row.productCode,
+            description: row.description,
+            image: '',
+            mrp,
+            dPrice,
+            nos: 0,
+            totalAmount: 0
+          };
+          
+          newProducts['cp-sw'].push(newProduct);
+          successCount++;
+        } catch (error) {
+          failedCount++;
+          errors.push(`Row ${index + 1}: Invalid data format`);
+        }
+      });
+    }
+    
+    if (successCount > 0) {
+      // Update state and localStorage
+      setProducts(newProducts);
+      localStorage.setItem('products', JSON.stringify(newProducts));
+    }
+    
+    setImportResults({
+      success: successCount,
+      failed: failedCount,
+      errors: errors.slice(0, 10) // Limit to first 10 errors to avoid overwhelming the user
+    });
+    setIsImporting(false);
+  };
+  
+  // Generate and download template for the current product type
+  const handleDownloadTemplate = (): void => {
+    let template: any[] = [];
+    let fileName = '';
+    
+    if (activeTab === 'tiles') {
+      template = [{
+        brand: 'Sample Brand',
+        areaOfApplication: 'Floor',
+        shadeName: 'Sample Shade',
+        dimensions: '600 x 600',
+        surface: 'Matte',
+        mrp: 100,
+        discount: 10,
+        packagingInfo: 4
+      }];
+      fileName = 'tiles_import_template.xlsx';
+    } else if (activeTab === 'adhesive') {
+      template = [{
+        brand: 'Sample Brand',
+        category: 'Tile Adhesive',
+        mrp: 500,
+        dPrice: 450
+      }];
+      fileName = 'adhesive_import_template.xlsx';
+    } else { // cp-sw
+      template = [{
+        brand: 'Sample Brand',
+        productCode: 'CP001',
+        description: 'Sample Product Description',
+        mrp: 1000,
+        dPrice: 900
+      }];
+      fileName = 'cpsw_import_template.xlsx';
+    }
+    
+    // Create workbook and worksheet
+    const worksheet = XLSX.utils.json_to_sheet(template);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Template');
+    
+    // Generate Excel file
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const data = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    
+    // Save file
+    saveAs(data, fileName);
+    
+    // Show success message
+    setSnackbarMessage(`Template for ${getCategoryName()} downloaded successfully`);
+    setSnackbarSeverity('success');
+    setSnackbarOpen(true);
+  };
+  
   return (
     <Container maxWidth="lg">
       <Box sx={{ my: 4 }}>
@@ -537,6 +807,24 @@ const ProductManagement: React.FC = () => {
                 onClick={handleAddProduct}
               >
                 Add {getCategoryName().slice(0, -1)}
+              </Button>
+              
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<UploadIcon />}
+                onClick={handleOpenImportDialog}
+              >
+                Bulk Import
+              </Button>
+              
+              <Button
+                variant="outlined"
+                color="secondary"
+                startIcon={<DownloadIcon />}
+                onClick={handleDownloadTemplate}
+              >
+                Download Template
               </Button>
             </Box>
           </Box>
@@ -1051,6 +1339,113 @@ const ProductManagement: React.FC = () => {
           {snackbarMessage}
         </Alert>
       </Snackbar>
+      
+      {/* Bulk Import Dialog */}
+      <Dialog open={importDialogOpen} onClose={handleCloseImportDialog} maxWidth="md" fullWidth>
+        <DialogTitle>Bulk Import {getCategoryName()}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ p: 2 }}>
+            <Typography variant="body1" paragraph>
+              Upload an Excel file with {getCategoryName()} data to import in bulk. Make sure to follow the template format.
+            </Typography>
+            
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', my: 3 }}>
+              <input
+                type="file"
+                accept=".xlsx, .xls"
+                onChange={handleFileImport}
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+              />
+              
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<FileUploadIcon />}
+                onClick={handleFileSelect}
+                disabled={isImporting}
+                sx={{ mb: 2 }}
+              >
+                Select Excel File
+              </Button>
+              
+              <Typography variant="body2" color="textSecondary">
+                Supported formats: .xlsx, .xls
+              </Typography>
+            </Box>
+            
+            {isImporting && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', my: 3 }}>
+                <CircularProgress />
+              </Box>
+            )}
+            
+            {importResults.success > 0 || importResults.failed > 0 ? (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Import Results
+                </Typography>
+                
+                <Box sx={{ display: 'flex', gap: 3, mb: 2 }}>
+                  <Typography>
+                    <strong>Successfully imported:</strong> {importResults.success} products
+                  </Typography>
+                  
+                  <Typography>
+                    <strong>Failed to import:</strong> {importResults.failed} products
+                  </Typography>
+                </Box>
+                
+                {importResults.errors.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" color="error" gutterBottom>
+                      Errors:
+                    </Typography>
+                    
+                    <Paper variant="outlined" sx={{ p: 2, maxHeight: '200px', overflow: 'auto' }}>
+                      {importResults.errors.map((error, index) => (
+                        <Typography key={index} variant="body2" color="error" paragraph>
+                          {error}
+                        </Typography>
+                      ))}
+                      
+                      {importResults.errors.length >= 10 && (
+                        <Typography variant="body2" color="textSecondary">
+                          Showing first 10 errors only. There may be more issues in the file.
+                        </Typography>
+                      )}
+                    </Paper>
+                  </Box>
+                )}
+              </Box>
+            ) : null}
+            
+            <Divider sx={{ my: 3 }} />
+            
+            <Typography variant="subtitle1" gutterBottom>
+              Need a template?
+            </Typography>
+            
+            <Typography variant="body2" paragraph>
+              Download a template file with the correct format for {getCategoryName()} import.
+            </Typography>
+            
+            <Button
+              variant="outlined"
+              color="primary"
+              startIcon={<DownloadIcon />}
+              onClick={handleDownloadTemplate}
+            >
+              Download Template
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseImportDialog} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

@@ -11,6 +11,7 @@ import QuotationManagement from './pages/QuotationManagement';
 import ProductManagement from './pages/ProductManagement';
 import CustomerManagement from './pages/CustomerManagement';
 import StaffManagement from './pages/StaffManagement';
+import Settings from './pages/Settings';
 import Layout from './components/Layout';
 
 // Create a theme instance
@@ -47,6 +48,7 @@ function App() {
           <Route path="/products" element={<ProductManagement />} />
           <Route path="/customers" element={<CustomerManagement />} />
           <Route path="/staff" element={<StaffManagement />} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
       </Layout>
     </ThemeProvider>
